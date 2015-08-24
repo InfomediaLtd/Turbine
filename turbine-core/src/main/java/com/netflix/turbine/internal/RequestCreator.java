@@ -38,7 +38,8 @@ public class RequestCreator {
      * @return The generated {@link HttpClientRequest} with basic auth (if applicable)
      */
     public static HttpClientRequest<ByteBuf> createRequest(URI uri) {
-        String uriToUse = stripUserInfoFromUriIfDefined(uri).toASCIIString();
+        String uriToUse = stripUserInfoFromUriIfDefined(uri).getPath();
+
         HttpClientRequest<ByteBuf> request = HttpClientRequest.createGet(uriToUse);
 
         if (uri.getUserInfo() != null) {
