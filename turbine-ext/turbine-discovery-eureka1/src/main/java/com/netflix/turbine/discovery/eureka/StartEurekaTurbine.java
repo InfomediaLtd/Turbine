@@ -15,6 +15,10 @@
  */
 package com.netflix.turbine.discovery.eureka;
 
+import com.netflix.appinfo.providers.CloudInstanceConfigProvider;
+import com.netflix.discovery.DiscoveryManager;
+import com.netflix.discovery.providers.DefaultEurekaClientConfigProvider;
+import com.netflix.discovery.shared.Applications;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 
@@ -22,6 +26,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.netflix.turbine.Turbine;
+
+import java.util.stream.Collector;
+import java.util.stream.Collectors;
 
 public class StartEurekaTurbine {
     private static final Logger logger = LoggerFactory.getLogger(StartEurekaTurbine.class);
@@ -47,8 +54,13 @@ public class StartEurekaTurbine {
 
         String app = null;
         if (!options.has("app")) {
-            System.err.println("Argument -app required for Eureka instance discovery. Eg. -app api");
-            System.exit(-1);
+
+            logger.info("No app specified. Will retrieve and use list of apps from Eureka.");
+            DiscoveryManager.getInstance().initComponent(new CloudInstanceConfigProvider().get(), new DefaultEurekaClientConfigProvider().get());
+            Applications applications = DiscoveryManager.getInstance().getDiscoveryClient().getApplications();
+            app = applications.getRegisteredApplications().stream().map(application -> application.getName()).collect(Collectors.joining(","));
+            logger.info("Found the following apps: " + app);
+
         } else {
             app = String.valueOf(options.valueOf("app"));
         }
