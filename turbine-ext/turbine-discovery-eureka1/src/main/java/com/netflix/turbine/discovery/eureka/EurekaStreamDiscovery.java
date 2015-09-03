@@ -18,9 +18,11 @@ package com.netflix.turbine.discovery.eureka;
 import java.net.URI;
 import java.util.Arrays;
 
+import com.netflix.appinfo.InstanceInfo;
 import com.netflix.turbine.discovery.StreamAction;
 import com.netflix.turbine.discovery.StreamDiscovery;
 
+import org.apache.commons.lang.StringUtils;
 import rx.Observable;
 
 public class EurekaStreamDiscovery implements StreamDiscovery {
@@ -46,20 +48,36 @@ public class EurekaStreamDiscovery implements StreamDiscovery {
                     return new EurekaInstanceDiscovery()
                             .getInstanceEvents(appName)
                             .map(ei -> {
-                                URI uri;
-                                try {
-                                    uri = new URI(uriTemplate.replace(HOSTNAME, ei.getHostName()));
-                                } catch (Exception e) {
-                                    throw new RuntimeException("Invalid URI", e);
-                                }
-                                if (ei.getStatus() == EurekaInstance.Status.UP) {
-                                    return StreamAction.create(StreamAction.ActionType.ADD, uri);
-                                } else {
-                                    return StreamAction.create(StreamAction.ActionType.REMOVE, uri);
-                                }
+                                return getStreamAction(ei);
 
                             });
                 });
+    }
+
+    private StreamAction getStreamAction(EurekaInstance ei) {
+        URI uri;
+        try {
+            String hostName = ei.getHostName();
+            /*if (hasIP(ei)) {
+                // set the IP to be the hostname (if IP is used then it's better than not having one)
+                hostName = ei.getIPAddr();
+            }
+            if (hostName.startsWith("ip-")) {
+                hostName = hostName.substring(3).replaceAll("-",".");
+            }*/
+            uri = new URI(uriTemplate.replace(HOSTNAME, hostName));
+        } catch (Exception e) {
+            throw new RuntimeException("Invalid URI", e);
+        }
+        if (ei.getStatus() == EurekaInstance.Status.UP) {
+            return StreamAction.create(StreamAction.ActionType.ADD, uri);
+        } else {
+            return StreamAction.create(StreamAction.ActionType.REMOVE, uri);
+        }
+    }
+
+    public boolean hasIP(EurekaInstance instanceInfo) {
+        return StringUtils.isNotBlank(instanceInfo.getIPAddr());
     }
 
 }
