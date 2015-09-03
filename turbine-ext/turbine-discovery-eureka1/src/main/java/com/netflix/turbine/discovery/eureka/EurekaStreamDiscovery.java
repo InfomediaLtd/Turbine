@@ -15,17 +15,29 @@
  */
 package com.netflix.turbine.discovery.eureka;
 
-import java.net.URI;
-import java.util.Arrays;
-
-import com.netflix.appinfo.InstanceInfo;
+import com.netflix.appinfo.providers.CloudInstanceConfigProvider;
+import com.netflix.discovery.DiscoveryManager;
+import com.netflix.discovery.providers.DefaultEurekaClientConfigProvider;
+import com.netflix.discovery.shared.Application;
+import com.netflix.discovery.shared.Applications;
 import com.netflix.turbine.discovery.StreamAction;
 import com.netflix.turbine.discovery.StreamDiscovery;
-
+import org.apache.commons.lang.ArrayUtils;
 import org.apache.commons.lang.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import rx.Observable;
+import rx.Subscriber;
+
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class EurekaStreamDiscovery implements StreamDiscovery {
+
+    private static final Logger logger = LoggerFactory.getLogger(EurekaStreamDiscovery.class);
 
     public static EurekaStreamDiscovery create(String appName, String uriTemplate) {
         return new EurekaStreamDiscovery(appName, uriTemplate);
@@ -42,8 +54,10 @@ public class EurekaStreamDiscovery implements StreamDiscovery {
 
     @Override
     public Observable<StreamAction> getInstanceList() {
-        String[] appNames = appName.split(",");
-        return Observable.from(Arrays.asList(appNames))
+        return Observable.create((Subscriber<? super String> subscriber) -> {
+                    getAppList().forEach(subscriber::onNext);
+                    subscriber.onCompleted();
+                })
                 .flatMap(appName -> {
                     return new EurekaInstanceDiscovery()
                             .getInstanceEvents(appName)
@@ -52,6 +66,27 @@ public class EurekaStreamDiscovery implements StreamDiscovery {
 
                             });
                 });
+    }
+
+    private List<String> getAppList() {
+        String appNameToUse = null;
+        if (StringUtils.isBlank(appName)) {
+            logger.info("No app specified. Will retrieve and use list of apps from Eureka.");
+            if (DiscoveryManager.getInstance().getDiscoveryClient()==null) {
+                DiscoveryManager.getInstance().initComponent(new CloudInstanceConfigProvider().get(), new DefaultEurekaClientConfigProvider().get());
+            }
+            Applications applications = DiscoveryManager.getInstance().getDiscoveryClient().getApplications();
+            appNameToUse = applications.getRegisteredApplications().stream().map(Application::getName).collect(Collectors.joining(","));
+            logger.info("Found the following apps: " + appNameToUse);
+        } else {
+            appNameToUse = appName;
+        }
+        String[] appNames = appNameToUse.split(",");
+        if (ArrayUtils.isNotEmpty(appNames)) {
+            return Arrays.asList(appNames);
+        } else {
+            return new ArrayList<>();
+        }
     }
 
     private StreamAction getStreamAction(EurekaInstance ei) {

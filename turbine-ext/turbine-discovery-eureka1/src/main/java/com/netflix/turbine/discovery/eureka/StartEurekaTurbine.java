@@ -54,13 +54,7 @@ public class StartEurekaTurbine {
 
         String app = null;
         if (!options.has("app")) {
-
-            logger.info("No app specified. Will retrieve and use list of apps from Eureka.");
-            DiscoveryManager.getInstance().initComponent(new CloudInstanceConfigProvider().get(), new DefaultEurekaClientConfigProvider().get());
-            Applications applications = DiscoveryManager.getInstance().getDiscoveryClient().getApplications();
-            app = applications.getRegisteredApplications().stream().map(application -> application.getName()).collect(Collectors.joining(","));
-            logger.info("Found the following apps: " + app);
-
+            app = ""; // will retrieve app list from the server
         } else {
             app = String.valueOf(options.valueOf("app"));
         }
