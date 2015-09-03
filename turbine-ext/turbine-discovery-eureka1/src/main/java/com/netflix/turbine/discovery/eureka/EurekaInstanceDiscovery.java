@@ -62,22 +62,23 @@ public class EurekaInstanceDiscovery {
                     try {
                         logger.info("Fetching instance list for app: " + appName);
                         Application app = DiscoveryManager.getInstance().getDiscoveryClient().getApplication(appName);
-                        if (app == null) {
-                            subscriber.onError(new RuntimeException("App not found: " + appName));
-                            return;
-                        }
-                        List<InstanceInfo> instancesForApp = app.getInstances();
-                        if (instancesForApp != null) {
-                            logger.info("Received instance list for app: " + appName + " = " + instancesForApp.size());
-                            for (InstanceInfo instance : instancesForApp) {
-                                if (InstanceInfo.InstanceStatus.UP == instance.getStatus()) {
-                                    // we only emit UP instances, the delta process marks DOWN
-                                    subscriber.onNext(EurekaInstance.create(instance));
+                        if (app != null) {
+                            List<InstanceInfo> instancesForApp = app.getInstances();
+                            if (instancesForApp != null) {
+                                logger.info("Received instance list for app: " + appName + " = " + instancesForApp.size());
+                                for (InstanceInfo instance : instancesForApp) {
+                                    if (InstanceInfo.InstanceStatus.UP == instance.getStatus()) {
+                                        // we only emit UP instances, the delta process marks DOWN
+                                        subscriber.onNext(EurekaInstance.create(instance));
+                                    }
                                 }
+                                subscriber.onCompleted();
+                            } else {
+                                subscriber.onError(new RuntimeException("Failed to retrieve instances for appName: " + appName));
                             }
-                            subscriber.onCompleted();
                         } else {
-                            subscriber.onError(new RuntimeException("Failed to retrieve instances for appName: " + appName));
+                            logger.info("No instances found for app: " + appName);
+                            subscriber.onCompleted();
                         }
                     } catch (Throwable e) {
                         subscriber.onError(e);
