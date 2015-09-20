@@ -22,7 +22,6 @@ import com.netflix.discovery.shared.Application;
 import com.netflix.discovery.shared.Applications;
 import com.netflix.turbine.discovery.StreamAction;
 import com.netflix.turbine.discovery.StreamDiscovery;
-import org.apache.commons.lang.ArrayUtils;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,10 +29,9 @@ import rx.Observable;
 import rx.Subscriber;
 
 import java.net.URI;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
-import java.util.stream.Collectors;
+import java.util.HashSet;
+import java.util.Set;
 
 public class EurekaStreamDiscovery implements StreamDiscovery {
 
@@ -68,25 +66,30 @@ public class EurekaStreamDiscovery implements StreamDiscovery {
                 });
     }
 
-    private List<String> getAppList() {
-        String appNameToUse = null;
+    private Set<String> getAppList() {
+        Set<String> appList = new HashSet<>();
+
         if (StringUtils.isBlank(appName)) {
             logger.info("No app specified. Will retrieve and use list of apps from Eureka.");
             if (DiscoveryManager.getInstance().getDiscoveryClient()==null) {
                 DiscoveryManager.getInstance().initComponent(new CloudInstanceConfigProvider().get(), new DefaultEurekaClientConfigProvider().get());
             }
-            Applications applications = DiscoveryManager.getInstance().getDiscoveryClient().getApplications();
-            appNameToUse = applications.getRegisteredApplications().stream().map(Application::getName).collect(Collectors.joining(","));
-            logger.info("Found the following apps: " + appNameToUse);
+
+            // Get local and remote apps
+            Set<String> allKnownRegions = DiscoveryManager.getInstance().getDiscoveryClient().getAllKnownRegions();
+            if (allKnownRegions!=null) {
+                allKnownRegions.forEach(region -> {
+                    Applications applicationsForARegion = DiscoveryManager.getInstance().getDiscoveryClient().getApplicationsForARegion(region);
+                    if (applicationsForARegion != null) {
+                        applicationsForARegion.getRegisteredApplications().stream().map(Application::getName).forEach(appList::add);
+                    }
+                });
+            }
+            logger.info("Found the following apps: " + appList);
         } else {
-            appNameToUse = appName;
+            Arrays.stream(appName.split(",")).forEach(appList::add);
         }
-        String[] appNames = appNameToUse.split(",");
-        if (ArrayUtils.isNotEmpty(appNames)) {
-            return Arrays.asList(appNames);
-        } else {
-            return new ArrayList<>();
-        }
+        return appList;
     }
 
     private StreamAction getStreamAction(EurekaInstance ei) {

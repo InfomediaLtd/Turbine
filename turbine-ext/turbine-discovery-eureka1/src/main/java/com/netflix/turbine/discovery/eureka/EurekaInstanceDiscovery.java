@@ -21,6 +21,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
+import com.netflix.discovery.shared.Applications;
+import org.apache.commons.collections.CollectionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,25 +63,37 @@ public class EurekaInstanceDiscovery {
                 create((Subscriber<? super EurekaInstance> subscriber) -> {
                     try {
                         logger.info("Fetching instance list for app: " + appName);
-                        Application app = DiscoveryManager.getInstance().getDiscoveryClient().getApplication(appName);
-                        if (app != null) {
-                            List<InstanceInfo> instancesForApp = app.getInstances();
-                            if (instancesForApp != null) {
-                                logger.info("Received instance list for app: " + appName + " = " + instancesForApp.size());
-                                for (InstanceInfo instance : instancesForApp) {
-                                    if (InstanceInfo.InstanceStatus.UP == instance.getStatus()) {
-                                        // we only emit UP instances, the delta process marks DOWN
-                                        subscriber.onNext(EurekaInstance.create(instance));
+                        List<InstanceInfo> instancesForApp = new ArrayList<InstanceInfo>();
+
+                        // Get local and remote instances
+                        Set<String> allKnownRegions = DiscoveryManager.getInstance().getDiscoveryClient().getAllKnownRegions();
+                        if (allKnownRegions!=null) {
+                            allKnownRegions.forEach(region -> {
+                                Applications applicationsForARegion = DiscoveryManager.getInstance().getDiscoveryClient().getApplicationsForARegion(region);
+                                if (applicationsForARegion != null) {
+                                    List<Application> registeredApplications = applicationsForARegion.getRegisteredApplications();
+                                    if (CollectionUtils.isNotEmpty(registeredApplications)) {
+                                        registeredApplications.forEach(application -> {
+                                            if (application.getName().equalsIgnoreCase(appName)) {
+                                                instancesForApp.addAll(application.getInstances());
+                                            }
+                                        });
                                     }
                                 }
-                                subscriber.onCompleted();
-                            } else {
-                                subscriber.onError(new RuntimeException("Failed to retrieve instances for appName: " + appName));
-                            }
-                        } else {
-                            logger.info("No instances found for app: " + appName);
-                            subscriber.onCompleted();
+                            });
                         }
+
+                        if (CollectionUtils.isNotEmpty(instancesForApp)) {
+                            logger.info("Received instance list for app: " + appName + " = " + instancesForApp.size());
+                            for (InstanceInfo instance : instancesForApp) {
+                                if (InstanceInfo.InstanceStatus.UP == instance.getStatus()) {
+                                    // we only emit UP instances, the delta process marks DOWN
+                                    subscriber.onNext(EurekaInstance.create(instance));
+                                }
+                            }
+                        }
+                        subscriber.onCompleted();
+
                     } catch (Throwable e) {
                         subscriber.onError(e);
                     }
